@@ -40,7 +40,9 @@ abstract class Post_Cloner_Meta_Box
       'post_duplicator_meta_box_1',
       'Post Duplication',
       [self::class, 'html'],
-      'post'
+      'post',
+      'side',
+'     core'
     );
   }
 
@@ -79,17 +81,17 @@ abstract class Post_Cloner_Meta_Box
   {
     $value = get_post_meta($post->ID, 'has_been_cloned', true);
     if ($value == "true") { ?>
-      <label for="">
-        This post has already been cloned.
+      <label for="post_duplicator_field">
+        This post has already been cloned, but can be cloned again.
       </label>
     <?php } else { ?>
       <label for="post_duplicator_field">
-        Check this box to clone this post with an alternative layout.
+        Check this box to clone this post with a canonical link.
       </label>
+      <?php
+    } ?>
       <input type="checkbox" name="post_duplicator_field" id="post_duplicator_field" value="true" <?php if(get_post_meta($post->ID, 'has_been_cloned', true) == "true") { echo 'checked disabled'; } ?>> clone<br>
-    <?php
-    }
-  }
+  <?php }
 
 }
 
