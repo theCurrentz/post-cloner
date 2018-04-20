@@ -1,8 +1,21 @@
 <?php
 abstract class Post_Cloner_Meta_Box
 {
+  //adds meta box width duplication toggle
+  public static function add() {
+    add_meta_box(
+      'post_duplicator_meta_box_1',
+      'Post Duplication',
+      [self::class, 'html'],
+      'post',
+      'side',
+      'core'
+    );
+  }
+
   //clones a post & its meta data
-  public static function clone_post($post_id) {
+  public static function clone_post($post_id, $clone_category) {
+      $clone_category = (empty($clone_category)) ? get_option('default_clone_cat') : $clone_category;
       $title = get_the_title($post_id);
       $parent_post = get_post($post_id);
       $post = array(
@@ -29,40 +42,29 @@ abstract class Post_Cloner_Meta_Box
       //update cloned post with a custom post meta field that stores it's original counterpart's ID, to be used as a canonical reference
       update_post_meta($duplicat_post_id, 'canonical_reference', $post_id);
 
-      //reset and set the categories for the cloned post
-      wp_set_post_categories($duplicat_post_id, array(1290), false);
+      //set the categories for the cloned post
+      update_option('default_clone_cat', $clone_category );
+      $clone_category = get_cat_ID($clone_category);
+      wp_set_post_categories($duplicat_post_id, array( $clone_category ), false);
 
-    //return the id for redirection purposes
+    //return the editing url for redirection
     return get_site_url() .'/wp-admin/post.php?post='.$duplicat_post_id.'&action=edit';
   }
 
-  //adds meta box width duplication toggle
-  public static function add() {
-    add_meta_box(
-      'post_duplicator_meta_box_1',
-      'Post Duplication',
-      [self::class, 'html'],
-      'post',
-      'side',
-      'core'
-    );
-  }
-
-  //evaluations clone state, if possible saves data and clones post
+  //evaluations clone state, if possible updates meta data and clones post
   public static function post_clone_execute($post_id)
   {
-    $post_id = $_POST['post_id'];
+    if(empty($post_id))
+      $post_id = $_POST['post_id'];
+
     $reponse = array();
 
-    $has_been_cloned = get_post_meta($post_id, 'has_been_cloned', true);
+    $clone_category = ( isset($_POST['clone_category']) ) ? $_POST['clone_category'] : null;
 
     if ( isset($_POST['post_duplicator_field']) )  {
       //update parent custom post meta boolean indicating that this post has been cloned
       update_post_meta($post_id, 'has_been_cloned', $_POST['post_duplicator_field']);
-      $has_been_cloned = get_post_meta($post_id, 'has_been_cloned', true);
-      if ($has_been_cloned == "true") {
-        $duplicat_post_url = self::clone_post($post_id);
-      }
+      $duplicat_post_url = self::clone_post($post_id, $clone_category);
       $response['message'] = "Cloned! Redirecting you to the clone...";
       $response['post_url'] = $duplicat_post_url;
     }
@@ -74,51 +76,10 @@ abstract class Post_Cloner_Meta_Box
     return $response;
   }
 
-
-  //meta box html
+  //meta box html & js
   public static function html($post)
   {
-    //ajax clone script
     ?>
-    <script type="text/javascript" >
-    	jQuery(document).ready(function($) {
-
-    		//execute post
-        $('#post_duplicator_field').click( function()
-          {
-            jQuery.ajax({
-              type: "POST",
-              url: "/wp-admin/admin-ajax.php",
-              data : {
-                'action': "post_clone_execute",
-                'post_duplicator_field': 'true',
-                'post_id': '<?php echo $post->ID?>'
-              },
-              success: function(response) {
-                console.log(response['message']);
-                //redirect user to cloned post draft
-                var postCloneURL = response['post_url'],
-                    postClone = document.getElementById('postClone'),
-                    postCloneBoxStyle = 'z-index: 9999; background: white; position: fixed; top: 45%; left: 50%; right: 50%; height: 100px; width: 200px; padding: 20px; display: flex; flex-direction: column; justify-content: space-evenly;  box-shadow: 0px 0px 50rem 50rem rgba(0,0,0,.5);',
-                    postCloneStayHere = document.createElement('div');
-
-                postCloneStayHere.setAttribute('class', 'button button-primary button-large');
-                postCloneStayHere.innerHTML = 'Stay Here';
-                postClone.setAttribute('style', postCloneBoxStyle);
-                postClone.innerHTML = '<a href="'+postCloneURL+'" id="postCloneURL" style="display: block;" class="button button-primary button-large">Go To Clone</a>';
-                postClone.appendChild(postCloneStayHere);
-                console.log(postClone);
-
-                postCloneStayHere.addEventListener('click',
-                  function() {
-                      postClone.setAttribute('style', 'display: none;');
-                  }
-                );
-              }
-          });
-    	   });
-        });
-	</script>
   <?php
     echo '<div id="postClone"></div>';
     $value = get_post_meta($post->ID, 'has_been_cloned', true);
@@ -134,20 +95,92 @@ abstract class Post_Cloner_Meta_Box
     } ?>
     <br><br>
       <input type="text" class="hidden" name="post_id" value="<?php echo $post->ID?>"/>
+      <select id="clone_cat_select" name="clone_category">
+        <?php
+        $allCats = get_categories();
+        foreach($allCats as $cat)
+        {
+          echo '<option value="'.$cat->name.'"'.selected(get_option('default_clone_cat'), $cat->name).'>'.$cat->name.'</option>';
+        }
+        ?>
+      </select>
       <input class="button button-primary button-large" type="button" name="post_duplicator_field" id="post_duplicator_field" value="Clone"><br>
-  <?php }
+      <script type="text/javascript" >
+      //ajax clone script
+        jQuery(document).ready(function($) {
 
+          //execute post
+          $('#post_duplicator_field').click( function()
+            {
+              jQuery.ajax({
+                type: "POST",
+                url: "/wp-admin/admin-ajax.php",
+                data : {
+                  'action': "post_clone_execute",
+                  'post_duplicator_field': 'true',
+                  'post_id': '<?php echo $post->ID?>',
+                  'clone_category':  $('#clone_cat_select').val()
+                },
+                success: function(response) {
+                  console.log(response['message']);
+                  //redirect user to cloned post draft via pop up
+                  var postCloneURL = response['post_url'],
+                      postClone = document.getElementById('postClone'),
+                      postCloneBoxStyle = 'z-index: 9999; background: white; position: fixed; top: 45%; left: 50%; right: 50%; height: 100px; width: 200px; padding: 20px; display: flex; flex-direction: column; justify-content: space-evenly;  box-shadow: 0px 0px 50rem 50rem rgba(0,0,0,.5);',
+                      postCloneStayHere = document.createElement('div');
+                  console.log(postCloneURL);
+                  postCloneStayHere.setAttribute('class', 'button button-primary button-large');
+                  postCloneStayHere.innerHTML = 'Stay Here';
+                  postClone.setAttribute('style', postCloneBoxStyle);
+                  postClone.innerHTML = '<a href="'+postCloneURL+'" id="postCloneURL" style="display: block;" class="button button-primary button-large">Go To Clone</a>';
+                  postClone.appendChild(postCloneStayHere);
+
+                  postCloneStayHere.addEventListener('click',
+                    function() {
+                        postClone.setAttribute('style', 'display: none;');
+                    }
+                  );
+                }
+            });
+           });
+          });
+    </script>
+  <?php }
 }
 
-
-//invoke class and methods for adding meta boxes and PUBLISHING(not saving) And Updating posts
+//invoke duplication method callbacks to add meta box and ajax action callback
 add_action('add_meta_boxes', ['Post_Cloner_Meta_Box', 'add']);
-// add_action('publish_post', ['Post_Cloner_Meta_Box', 'save']);
-// add_action('post_updated', ['Post_Cloner_Meta_Box', 'save']);
 add_action( 'wp_ajax_post_clone_execute',  'post_clone_execute' );
+
+//execution for post editing screen via AJAX
 function post_clone_execute()
 {
   global $post;
   $response = Post_Cloner_Meta_Box::post_clone_execute($post->post_id);
   wp_send_json($response);
 }
+
+//execute for all posts action row
+function post_clone_action()
+{
+  if (! ( isset( $_GET['post_id']) || isset( $_POST['post_id'])  || ( isset($_REQUEST['action']) && 'post_clone_action' == $_REQUEST['action'] ) ) ) {
+    wp_die('No post to duplicate has been supplied!');
+  }
+  $post_id = (isset($_GET['post_id']) ? absint( $_GET['post_id'] ) : absint( $_POST['post_id'] ) );
+  $result = Post_Cloner_Meta_Box::clone_post($post_id, null);
+  echo 'Redirecting you to the clone...';
+  wp_redirect( $result );
+  exit;
+}
+add_action( 'admin_action_post_clone_action', 'post_clone_action' );
+
+
+$category = get_option('default_clone_cat');
+//callback for post_row_action filter display action link for clone on all posts action row
+function post_clone_action_link($actions, $category)
+{
+  global $post;
+  $actions['post_clone_action'] = '<a href="admin.php?action=post_clone_action&post_id='.$post->ID.'">Clone</a>';
+  return $actions;
+}
+add_filter('post_row_actions', 'post_clone_action_link', 10, 2);
