@@ -39,6 +39,8 @@ function remove_canonical() {
     add_filter( 'wpseo_canonical', '__return_false', 10);
     //disable default canonical tag insertion
     remove_action('wp_head', 'rel_canonical');
+    //disable canonical function (idrop only)
+    remove_action('wp_head', 'get_canonical');
   }
 }
 add_action( 'wpseo_head', 'remove_canonical', 4);
