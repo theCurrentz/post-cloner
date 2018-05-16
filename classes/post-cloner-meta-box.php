@@ -14,7 +14,7 @@ abstract class Post_Cloner_Meta_Box
   }
 
   //clones a post & its meta data
-  public static function clone_post($post_id, $clone_category,  $use_canonical) {
+  public static function clone_post($post_id, $clone_category) {
       $clone_category = (empty($clone_category)) ? get_option('default_clone_cat') : $clone_category;
       $title = get_the_title($post_id);
       $parent_post = get_post($post_id);
@@ -40,8 +40,7 @@ abstract class Post_Cloner_Meta_Box
       }
 
       //update cloned post with a custom post meta field that stores it's original counterpart's ID, to be used as a canonical reference
-      if($use_canonical == true)
-        update_post_meta($duplicat_post_id, 'canonical_reference', $post_id);
+      update_post_meta($duplicat_post_id, 'canonical_reference', $post_id);
 
       //set the categories for the cloned post
       update_option('default_clone_cat', $clone_category );
@@ -61,12 +60,11 @@ abstract class Post_Cloner_Meta_Box
     $reponse = array();
 
     $clone_category = ( isset($_POST['clone_category']) ) ? $_POST['clone_category'] : null;
-    $use_canonical = ( isset($_POST['use_canonical']) ) ? $_POST['use_canonical'] : null;
 
     if ( isset($_POST['post_duplicator_field']) )  {
       //update parent custom post meta boolean indicating that this post has been cloned
       update_post_meta($post_id, 'has_been_cloned', $_POST['post_duplicator_field']);
-      $duplicat_post_url = self::clone_post($post_id, $clone_category, $use_canonical);
+      $duplicat_post_url = self::clone_post($post_id, $clone_category);
       $response['message'] = "Cloned! Redirecting you to the clone...";
       $response['post_url'] = $duplicat_post_url;
     }
@@ -76,6 +74,14 @@ abstract class Post_Cloner_Meta_Box
       $response['post_url'] = "";
     }
     return $response;
+  }
+
+ //function used to save the canonical
+  public static function canonical_save() {
+     $no_canonical = ( isset($_POST['no_canonical']) ) ? $_POST['no_canonical'] : null;
+     update_post_meta(get_the_ID(), 'no_canonical', $no_canonical);
+     if($no_canonical == "true")
+      update_post_meta(get_the_ID(), 'canonical_reference', null);
   }
 
   //meta box html & js
@@ -107,15 +113,18 @@ abstract class Post_Cloner_Meta_Box
         }
         ?>
       </select>
-      <input class="button button-primary button-large" type="button" name="post_duplicator_field" id="post_duplicator_field" value="Clone"/><br>
+      <input class="button button-primary button-large" type="button" name="post_duplicator_field" id="post_duplicator_field" value="Clone"/><br><br>
+      <hr/>
       <!-- canonical selection -->
-      <?php $use_canonical = get_post_meta(get_the_ID(), 'use_canonical'); ?>
-      <input type="checkbox" name="use_canonical" id="use_canonical" value="true" <?php checked($use_canonical); ?> />
+      <?php $no_canonical = get_post_meta(get_the_ID(), 'no_canonical', true);
+      ?>
+      <label>Disable Canonical Reference</label>
+      <input type="checkbox" name="no_canonical" id="no_canonical" value="true" <?php checked($no_canonical, "true"); ?> />
       <script type="text/javascript" >
       //ajax clone script
         jQuery(document).ready(function($) {
 
-          //execute post
+          //execute post data send and responses
           $('#post_duplicator_field').click( function()
             {
               jQuery.ajax({
@@ -125,8 +134,7 @@ abstract class Post_Cloner_Meta_Box
                   'action': "post_clone_execute",
                   'post_duplicator_field': 'true',
                   'post_id': '<?php echo $post->ID?>',
-                  'clone_category':  $('#clone_cat_select').val(),
-                  'use_canonical': $('#use_canonical')
+                  'clone_category':  $('#clone_cat_select').val()
                 },
                 success: function(response) {
                   console.log(response['message']);
@@ -158,6 +166,7 @@ abstract class Post_Cloner_Meta_Box
 //invoke duplication method callbacks to add meta box and ajax action callback
 add_action('add_meta_boxes', ['Post_Cloner_Meta_Box', 'add']);
 add_action( 'wp_ajax_post_clone_execute',  'post_clone_execute' );
+add_action( 'save_post', ['Post_Cloner_Meta_Box', 'canonical_save'] );
 
 //execution for post editing screen via AJAX
 function post_clone_execute()

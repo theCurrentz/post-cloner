@@ -15,5 +15,5 @@ function enqueue_post_duplicator_scripts() {
 
 add_action('admin_enqueue_scripts', 'enqueue_post_duplicator_scripts');
 
-require_once( plugin_dir_path( __FILE__ ) . '/classes/post-cloner-meta-box.php');
-require_once( plugin_dir_path( __FILE__ ) . '/includes/clone-posts-canonical.php');
+require( plugin_dir_path( __FILE__ ) . '/classes/post-cloner-meta-box.php');
+require( plugin_dir_path( __FILE__ ) . '/includes/clone-posts-canonical.php');
